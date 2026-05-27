@@ -1,79 +1,56 @@
 name: Build Plugin
-
 on:
-    push:
-        branches: [main]
-    pull_request:
-        branches: [main]
-    release:
-        types: [created]
-    workflow_dispatch:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  release:
+    types: [created]
+  workflow_dispatch
 
 jobs:
-    build:
-        runs-on: ubuntu-latest
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-        steps:
-            - uses: actions/checkout@v4
+      - name: Set up JDK 21 Zulu
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "zulu"
 
-            - name: Set up JDK 21 Zulu
-              uses: actions/setup-java@v4
-              with:
-                  java-version: "21"
-                  distribution: "zulu"
+      # 写入全局Maven仓库配置
+      - name: Inject Maven Repositories
+        run: |
+          mkdir -p ~/.m2
+          cat > ~/.m2/settings.xml << 'EOF'
+<settings>
+  <repositories>
+    <repository>
+      <id>nightexpress-releases</id>
+      <url>https://repo.nightexpressdev.com/releases</url>
+    </repository>
+    <repository>
+      <id>papermc</id>
+      <url>https://repo.papermc.io/repository/maven-public/</url>
+    </repository>
+  </repositories>
+</settings>
+EOF
 
-            - name: Update pom.xml with Nightcore repository and dependency (version 2.15.3)
-              run: |
-                  # 安装 xmlstarlet 用于处理 pom.xml
-                  sudo apt-get update && sudo apt-get install -y xmlstarlet
+      # 打包跳过测试
+      - name: Maven Build Package
+        run: mvn -B clean package -DskipTests
 
-                  # 定义命名空间（Maven POM 没有默认命名空间，但根元素可能有 xsi 等，这里简单处理）
-                  # 如果没有 repositories 节点则创建
-                  if ! xmlstarlet sel -t -c "/project/repositories" pom.xml | grep -q "."; then
-                      xmlstarlet ed -L -s "/project" -t elem -n "repositories" -s "/project/repositories" -t elem -n "repository" pom.xml
-                  fi
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Plugin
+          path: target/*.jar
 
-                  # 删除可能存在的同名仓库（避免重复）
-                  xmlstarlet ed -L -d "/project/repositories/repository[id='nightexpress-releases']" pom.xml
-
-                  # 添加 Nightexpress 仓库
-                  xmlstarlet ed -L \
-                      -s "/project/repositories" -t elem -n "repository" -v "" \
-                      -s "/project/repositories/repository[last()]" -t elem -n "id" -v "nightexpress-releases" \
-                      -s "/project/repositories/repository[last()]" -t elem -n "url" -v "https://repo.nightexpressdev.com/releases" \
-                      pom.xml
-
-                  # 处理依赖：先删除已存在的旧 Nightcore 依赖
-                  xmlstarlet ed -L -d "/project/dependencies/dependency[groupId='su.nightexpress.nightcore' and artifactId='main']" pom.xml
-
-                  # 如果没有 dependencies 节点则创建
-                  if ! xmlstarlet sel -t -c "/project/dependencies" pom.xml | grep -q "."; then
-                      xmlstarlet ed -L -s "/project" -t elem -n "dependencies" pom.xml
-                  fi
-
-                  # 添加新的依赖（版本 2.15.3）
-                  xmlstarlet ed -L \
-                      -s "/project/dependencies" -t elem -n "dependency" -v "" \
-                      -s "/project/dependencies/dependency[last()]" -t elem -n "groupId" -v "su.nightexpress.nightcore" \
-                      -s "/project/dependencies/dependency[last()]" -t elem -n "artifactId" -v "main" \
-                      -s "/project/dependencies/dependency[last()]" -t elem -n "version" -v "2.15.3" \
-                      pom.xml
-
-                  echo "✅ pom.xml 已更新：添加 nightexpress-releases 仓库，Nightcore 依赖强制使用 2.15.3"
-                  echo "📄 修改后的依赖内容预览："
-                  xmlstarlet sel -t -c "/project/dependencies/dependency[groupId='su.nightexpress.nightcore' and artifactId='main']" pom.xml
-
-            - name: Build with Maven
-              run: mvn -B package
-
-            - name: Upload artifact
-              uses: actions/upload-artifact@v4
-              with:
-                  name: Plugin
-                  path: target/*.jar
-
-            - name: Upload to release
-              if: github.event_name == 'release'
-              uses: softprops/action-gh-release@v2
-              with:
-                  files: target/*.jar
+      - name: Upload To GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: target/*.jar
