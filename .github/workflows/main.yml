@@ -6,7 +6,7 @@ on:
     branches: [master]
   release:
     types: [created]
-  workflow_dispatch
+  workflow_dispatch:
 
 jobs:
   build:
@@ -20,7 +20,6 @@ jobs:
           java-version: "21"
           distribution: "zulu"
 
-      # 写入全局Maven仓库配置
       - name: Inject Maven Repositories
         run: |
           mkdir -p ~/.m2
@@ -39,7 +38,6 @@ jobs:
 </settings>
 EOF
 
-      # 打包跳过测试
       - name: Maven Build Package
         run: mvn -B clean package -DskipTests
 
