@@ -1,11 +1,12 @@
 name: Build Plugin
+
 on:
   push:
-    branches: [master]
+    branches: [ "master" ]
   pull_request:
-    branches: [master]
+    branches: [ "master" ]
   release:
-    types: [created]
+    types: [ created ]
   workflow_dispatch:
 
 jobs:
@@ -24,19 +25,19 @@ jobs:
         run: |
           mkdir -p ~/.m2
           cat > ~/.m2/settings.xml << 'EOF'
-<settings>
-  <repositories>
-    <repository>
-      <id>nightexpress-releases</id>
-      <url>https://repo.nightexpressdev.com/releases</url>
-    </repository>
-    <repository>
-      <id>papermc</id>
-      <url>https://repo.papermc.io/repository/maven-public/</url>
-    </repository>
-  </repositories>
-</settings>
-EOF
+          <settings>
+            <repositories>
+              <repository>
+                <id>nightexpress-releases</id>
+                <url>https://repo.nightexpressdev.com/releases</url>
+              </repository>
+              <repository>
+                <id>papermc</id>
+                <url>https://repo.papermc.io/repository/maven-public/</url>
+              </repository>
+            </repositories>
+          </settings>
+          EOF
 
       - name: Maven Build Package
         run: mvn -B clean package -DskipTests
@@ -52,3 +53,5 @@ EOF
         uses: softprops/action-gh-release@v2
         with:
           files: target/*.jar
+          # 需要显式提供 GITHUB_TOKEN，否则上传可能失败
+          token: ${{ secrets.GITHUB_TOKEN }}
